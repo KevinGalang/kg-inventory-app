@@ -1,3 +1,5 @@
+import PageTitle from "@/components/PageTitle";
+
 const items = [
   {
     sku: "SKU-1",
@@ -90,3 +92,61 @@ const items = [
     cost: 28,
   },
 ];
+
+export default function ItemMasterListPage() {
+  return (
+    <section className="space-y-6">
+      <PageTitle
+        title="Item Master List"
+        description="Define core item data used throughout inventory and purchasing workflows."
+      />
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>
+                <th className="px-5 py-4 text-left font-semibold">SKU</th>
+                <th className="px-5 py-4 text-left font-semibold">
+                  Item Name
+                </th>
+                <th className="px-5 py-4 text-left font-semibold">Vendor</th>
+                <th className="px-5 py-4 text-left font-semibold">UOM</th>
+                <th className="px-5 py-4 text-left font-semibold">Qty</th>
+                <th className="px-5 py-4 text-left font-semibold">
+                  Category
+                </th>
+                <th className="px-5 py-4 text-left font-semibold">Cost</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {items.map((item) => (
+                <tr
+                  key={item.sku}
+                  className="border-t border-slate-100 hover:bg-slate-50"
+                >
+                  <td className="px-5 py-4 font-medium text-slate-700">
+                    {item.sku}
+                  </td>
+                  <td className="px-5 py-4 text-slate-700">
+                    {item.itemName}
+                  </td>
+                  <td className="px-5 py-4 text-slate-700">{item.vendor}</td>
+                  <td className="px-5 py-4 text-slate-700">{item.uom}</td>
+                  <td className="px-5 py-4 text-slate-700">{item.qty}</td>
+                  <td className="px-5 py-4 text-slate-700">
+                    {item.category}
+                  </td>
+                  <td className="px-5 py-4 text-slate-700">
+                    ${item.cost.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
