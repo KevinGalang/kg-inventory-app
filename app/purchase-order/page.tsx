@@ -37,7 +37,8 @@ type PurchaseOrderRow = {
   sku: string;
   itemDescription: string;
   ordered: number;
-  received: number;
+  received: number | "";
+  diff: number;
   expectedDate: string;
   status: string;
   invoiceNumber: string;
@@ -62,11 +63,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23001",
     sku: "SKU-1001",
     itemDescription: "Item 1",
-    ordered: 100,
-    received: 80,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-18",
-    status: "Sent",
-    invoiceNumber: "INV-1001",
+    status: "Invoiced",
+    invoiceNumber: "INV-23001",
     amount: 1200,
   },
   {
@@ -77,11 +79,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23001",
     sku: "SKU-1002",
     itemDescription: "Item 2",
-    ordered: 200,
-    received: 200,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-18",
-    status: "Received",
-    invoiceNumber: "INV-1001",
+    status: "Invoiced",
+    invoiceNumber: "INV-23001",
     amount: 2400,
   },
   {
@@ -92,11 +95,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23001",
     sku: "SKU-1003",
     itemDescription: "Item 3",
-    ordered: 150,
-    received: 100,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-18",
-    status: "In Transit",
-    invoiceNumber: "",
+    status: "Invoiced",
+    invoiceNumber: "INV-23001",
     amount: 1800,
   },
   {
@@ -107,11 +111,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23002",
     sku: "SKU-1004",
     itemDescription: "Item 4",
-    ordered: 75,
-    received: 75,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-21",
-    status: "Confirmed by Vendor",
-    invoiceNumber: "",
+    status: "Sent",
+    invoiceNumber: "INV-23002",
     amount: 950,
   },
   {
@@ -122,11 +127,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23002",
     sku: "SKU-1005",
     itemDescription: "Item 5",
-    ordered: 300,
-    received: 250,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-21",
-    status: "In Transit",
-    invoiceNumber: "",
+    status: "Sent",
+    invoiceNumber: "INV-23002",
     amount: 4100,
   },
   {
@@ -137,11 +143,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23002",
     sku: "SKU-1006",
     itemDescription: "Item 6",
-    ordered: 60,
-    received: 60,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-21",
-    status: "Invoiced",
-    invoiceNumber: "INV-1002",
+    status: "Sent",
+    invoiceNumber: "INV-23002",
     amount: 780,
   },
   {
@@ -152,11 +159,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23003",
     sku: "SKU-1007",
     itemDescription: "Item 7",
-    ordered: 90,
+    ordered: 10,
     received: 0,
+    diff: 0,
     expectedDate: "2026-05-25",
-    status: "Sent",
-    invoiceNumber: "",
+    status: "Confirmed by Vendor",
+    invoiceNumber: "INV-23003",
     amount: 990,
   },
   {
@@ -167,11 +175,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23003",
     sku: "SKU-1008",
     itemDescription: "Item 8",
-    ordered: 120,
+    ordered: 10,
     received: 0,
+    diff: 0,
     expectedDate: "2026-05-25",
     status: "Confirmed by Vendor",
-    invoiceNumber: "",
+    invoiceNumber: "INV-23003",
     amount: 1600,
   },
   {
@@ -182,11 +191,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23003",
     sku: "SKU-1009",
     itemDescription: "Item 9",
-    ordered: 50,
-    received: 25,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-25",
-    status: "In Transit",
-    invoiceNumber: "",
+    status: "Confirmed by Vendor",
+    invoiceNumber: "INV-23003",
     amount: 700,
   },
   {
@@ -197,11 +207,12 @@ const initialPurchaseOrders: PurchaseOrderRow[] = [
     poNumber: "PO-23003",
     sku: "SKU-1010",
     itemDescription: "Item 10",
-    ordered: 180,
-    received: 180,
+    ordered: 10,
+    received: 0,
+    diff: 0,
     expectedDate: "2026-05-25",
-    status: "Received",
-    invoiceNumber: "INV-1003",
+    status: "Confirmed by Vendor",
+    invoiceNumber: "INV-23003",
     amount: 3200,
   },
 ];
@@ -228,7 +239,7 @@ export default function PurchaseOrderPage() {
       sku: "",
       itemDescription: "",
       category: "",
-      ordered: 0,
+      ordered: 10,
       amount: 0,
     },
   ]);
@@ -274,21 +285,72 @@ export default function PurchaseOrderPage() {
     setEditingRows([]);
   };
 
+  const updateAllRowsInCurrentPo = (
+    field: keyof PurchaseOrderRow,
+    value: string | number
+  ) => {
+    setEditingRows((prev) =>
+      prev.map((row) => ({
+        ...row,
+        [field]: value,
+      }))
+    );
+  };
+
   const updateEditingRow = (
     rowId: number,
     field: keyof PurchaseOrderRow,
     value: string | number
   ) => {
-    setEditingRows((prev) =>
-      prev.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [field]: value,
-            }
-          : row
-      )
-    );
+    setEditingRows((prev) => {
+      const updatedRows = prev.map((row) => {
+        if (row.id !== rowId) return row;
+
+        const updatedRow = {
+          ...row,
+          [field]: value,
+        };
+
+        if (field === "received") {
+          const receivedValue = value === "" ? "" : Number(value);
+
+          return {
+            ...updatedRow,
+            received: receivedValue,
+            diff:
+              receivedValue === ""
+                ? 0
+                : Number(updatedRow.ordered) - Number(receivedValue),
+          };
+        }
+
+        if (field === "ordered") {
+          return {
+            ...updatedRow,
+            ordered: Number(value),
+            diff:
+              updatedRow.received === ""
+                ? 0
+                : Number(value) - Number(updatedRow.received),
+          };
+        }
+
+        return updatedRow;
+      });
+
+      if (field === "status" && value === "Received") {
+        const changedRow = updatedRows.find((row) => row.id === rowId);
+
+        if (changedRow?.received !== "" && Number(changedRow?.received) > 0) {
+          return updatedRows.map((row) => ({
+            ...row,
+            status: "Received",
+          }));
+        }
+      }
+
+      return updatedRows;
+    });
   };
 
   const copyAllQty = () => {
@@ -296,6 +358,8 @@ export default function PurchaseOrderPage() {
       prev.map((row) => ({
         ...row,
         received: row.ordered,
+        diff: 0,
+        status: "Received",
       }))
     );
   };
@@ -351,7 +415,7 @@ export default function PurchaseOrderPage() {
         sku: "",
         itemDescription: "",
         category: "",
-        ordered: 0,
+        ordered: 10,
         amount: 0,
       },
     ]);
@@ -363,6 +427,7 @@ export default function PurchaseOrderPage() {
 
   const saveNewPurchaseOrder = () => {
     const nextPoNumber = `PO-${23004}`;
+    const sharedInvoiceNumber = `INV-23004`;
 
     const newPurchaseOrderRows = newRows
       .filter((row) => row.itemDescription)
@@ -376,9 +441,10 @@ export default function PurchaseOrderPage() {
         itemDescription: row.itemDescription,
         ordered: Number(row.ordered),
         received: 0,
+        diff: 0,
         expectedDate: shipDate || "2026-06-01",
         status: "Sent",
-        invoiceNumber: "",
+        invoiceNumber: sharedInvoiceNumber,
         amount: Number(row.amount),
       }));
 
@@ -394,7 +460,7 @@ export default function PurchaseOrderPage() {
         sku: "",
         itemDescription: "",
         category: "",
-        ordered: 0,
+        ordered: 10,
         amount: 0,
       },
     ]);
@@ -522,8 +588,10 @@ export default function PurchaseOrderPage() {
                   <td className="px-5 py-4">{order.sku}</td>
                   <td className="px-5 py-4">{order.itemDescription}</td>
                   <td className="px-5 py-4">{order.ordered}</td>
-                  <td className="px-5 py-4">{order.received}</td>
-                  <td className="px-5 py-4">{order.ordered - order.received}</td>
+                  <td className="px-5 py-4">
+                    {order.received === "" ? "-" : order.received}
+                  </td>
+                  <td className="px-5 py-4">{order.diff}</td>
                   <td className="px-5 py-4">{order.expectedDate}</td>
                   <td className="px-5 py-4">
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -686,7 +754,9 @@ export default function PurchaseOrderPage() {
                             updateEditingRow(
                               row.id,
                               "received",
-                              Number(e.target.value)
+                              e.target.value === ""
+                                ? ""
+                                : Number(e.target.value)
                             )
                           }
                           className="w-24 rounded-md border border-slate-300 px-2 py-1"
@@ -694,7 +764,7 @@ export default function PurchaseOrderPage() {
                       </td>
 
                       <td className="border border-slate-200 px-3 py-2 text-center">
-                        {row.ordered - row.received}
+                        {row.diff}
                       </td>
 
                       <td className="border border-slate-200 px-3 py-2">
@@ -717,8 +787,7 @@ export default function PurchaseOrderPage() {
                         <input
                           value={row.invoiceNumber}
                           onChange={(e) =>
-                            updateEditingRow(
-                              row.id,
+                            updateAllRowsInCurrentPo(
                               "invoiceNumber",
                               e.target.value
                             )
