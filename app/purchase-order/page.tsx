@@ -10,7 +10,11 @@ import {
   Trash2,
   X,
   Save,
+  Eye,
+  Download,
+  Send,
 } from "lucide-react";
+import jsPDF from "jspdf";
 
 const items = Array.from({ length: 10 }, (_, index) => ({
   sku: `SKU-${1001 + index}`,
@@ -27,6 +31,8 @@ const statuses = [
 ];
 
 const vendors = ["Vendor 1", "Vendor 2", "Vendor 3"];
+const customers = ["Customer 1", "Customer 2", "Customer 3"];
+
 const PURCHASE_ORDERS_STORAGE_KEY = "kg_purchase_orders";
 
 type PurchaseOrderRow = {
@@ -245,6 +251,10 @@ function getNextPoNumber(existingOrders: PurchaseOrderRow[]) {
   return `PO-${maxNumber + 1}`;
 }
 
+function randomAmount() {
+  return Math.floor(Math.random() * 900) + 100;
+}
+
 export default function PurchaseOrderPage() {
   const [purchaseOrders, setPurchaseOrders] =
     useState<PurchaseOrderRow[]>(initialPurchaseOrders);
@@ -265,17 +275,18 @@ export default function PurchaseOrderPage() {
   const [editingRows, setEditingRows] = useState<PurchaseOrderRow[]>([]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newVendor, setNewVendor] = useState("Vendor 1");
-  const [newCustomer, setNewCustomer] = useState("Customer 1");
+  const [newVendor, setNewVendor] = useState("");
+  const [newCustomer, setNewCustomer] = useState("");
   const [shipDate, setShipDate] = useState("");
+  const [savedPoNumber, setSavedPoNumber] = useState("");
   const [newRows, setNewRows] = useState<NewOrderRow[]>([
     {
       id: Date.now(),
       sku: "",
       itemDescription: "",
       category: "",
-      ordered: 10,
-      amount: 0,
+      ordered: 0,
+      amount: randomAmount(),
     },
   ]);
 
@@ -311,6 +322,11 @@ export default function PurchaseOrderPage() {
     0
   );
 
+  const newPoTotal = newRows.reduce(
+    (total, row) => total + Number(row.amount || 0),
+    0
+  );
+
   const openPoDetails = (poNumber: string) => {
     const rows = purchaseOrders.filter((order) => order.poNumber === poNumber);
     setEditingPoNumber(poNumber);
@@ -322,10 +338,7 @@ export default function PurchaseOrderPage() {
     setEditingRows([]);
   };
 
-  const updateAllRowsInCurrentPo = (
-    field: "invoiceNumber",
-    value: string
-  ) => {
+  const updateAllRowsInCurrentPo = (field: "invoiceNumber", value: string) => {
     setEditingRows((prev) =>
       prev.map((row) => ({
         ...row,
@@ -383,13 +396,6 @@ export default function PurchaseOrderPage() {
           };
         }
 
-        if (field === "invoiceNumber") {
-          return {
-            ...row,
-            invoiceNumber: String(value),
-          };
-        }
-
         return row;
       });
 
@@ -425,9 +431,14 @@ export default function PurchaseOrderPage() {
         const updatedRow = editingRows.find((row) => row.id === order.id);
         return updatedRow || order;
       });
+
       writeSavedPurchaseOrders(
-        updatedOrders.filter((order) => !initialPurchaseOrders.some((initial) => initial.id === order.id))
+        updatedOrders.filter(
+          (order) =>
+            !initialPurchaseOrders.some((initial) => initial.id === order.id)
+        )
       );
+
       return updatedOrders;
     });
 
@@ -454,8 +465,23 @@ export default function PurchaseOrderPage() {
               sku: selectedItem.sku,
               itemDescription: selectedItem.itemDescription,
               category: selectedItem.category,
+              amount: row.amount || randomAmount(),
             };
           }
+        }
+
+        if (field === "ordered") {
+          return {
+            ...row,
+            ordered: Number(value),
+          };
+        }
+
+        if (field === "amount") {
+          return {
+            ...row,
+            amount: Number(value),
+          };
         }
 
         return {
@@ -474,8 +500,8 @@ export default function PurchaseOrderPage() {
         sku: "",
         itemDescription: "",
         category: "",
-        ordered: 10,
-        amount: 0,
+        ordered: 0,
+        amount: randomAmount(),
       },
     ]);
   };
@@ -484,18 +510,17 @@ export default function PurchaseOrderPage() {
     setNewRows((prev) => prev.filter((row) => row.id !== rowId));
   };
 
-  const saveNewPurchaseOrder = () => {
-    const nextPoNumber = getNextPoNumber(purchaseOrders);
-    const sharedInvoiceNumber = nextPoNumber.replace("PO-", "INV-");
+  const buildNewPurchaseOrderRows = (poNumber: string): PurchaseOrderRow[] => {
+    const sharedInvoiceNumber = poNumber.replace("PO-", "INV-");
 
-    const newPurchaseOrderRows: PurchaseOrderRow[] = newRows
+    return newRows
       .filter((row) => row.itemDescription)
       .map((row, index) => ({
         id: Date.now() + index,
-        vendor: newVendor,
-        customer: newCustomer,
+        vendor: newVendor || "Select Vendor",
+        customer: newCustomer || "Select Customer",
         category: row.category,
-        poNumber: nextPoNumber,
+        poNumber,
         sku: row.sku,
         itemDescription: row.itemDescription,
         ordered: Number(row.ordered),
@@ -506,27 +531,120 @@ export default function PurchaseOrderPage() {
         invoiceNumber: sharedInvoiceNumber,
         amount: Number(row.amount),
       }));
+  };
+
+  const saveNewPurchaseOrder = () => {
+    const nextPoNumber = savedPoNumber || getNextPoNumber(purchaseOrders);
+    const newPurchaseOrderRows = buildNewPurchaseOrderRows(nextPoNumber);
+
+    if (!newPurchaseOrderRows.length) return;
 
     setPurchaseOrders((prev) => {
-      const updatedOrders = [...newPurchaseOrderRows, ...prev];
-      writeSavedPurchaseOrders(
-        updatedOrders.filter((order) => !initialPurchaseOrders.some((initial) => initial.id === order.id))
+      const withoutExistingSamePo = prev.filter(
+        (row) => row.poNumber !== nextPoNumber
       );
+      const updatedOrders = [...newPurchaseOrderRows, ...withoutExistingSamePo];
+
+      writeSavedPurchaseOrders(
+        updatedOrders.filter(
+          (order) =>
+            !initialPurchaseOrders.some((initial) => initial.id === order.id)
+        )
+      );
+
       return updatedOrders;
     });
 
+    setSavedPoNumber(nextPoNumber);
+  };
+
+  const generatePdf = (mode: "preview" | "download") => {
+    const poNumber = savedPoNumber || getNextPoNumber(purchaseOrders);
+    const rows = buildNewPurchaseOrderRows(poNumber);
+
+    const doc = new jsPDF();
+    let y = 20;
+
+    doc.setFontSize(18);
+    doc.text("Purchase Order", 14, y);
+
+    y += 10;
+    doc.setFontSize(11);
+    doc.text(`PO Number: ${poNumber}`, 14, y);
+    y += 7;
+    doc.text(`Vendor: ${newVendor || "Select Vendor"}`, 14, y);
+    y += 7;
+    doc.text(`Customer: ${newCustomer || "Select Customer"}`, 14, y);
+    y += 7;
+    doc.text(`Ship Date: ${shipDate || "2026-06-01"}`, 14, y);
+    y += 7;
+    doc.text(`From: kevingalang.mcg@gmail.com`, 14, y);
+    y += 7;
+    doc.text(`To: mcgalang14@gmail.com`, 14, y);
+    y += 10;
+
+    doc.setFontSize(10);
+    doc.text("Item", 14, y);
+    doc.text("SKU", 60, y);
+    doc.text("Category", 95, y);
+    doc.text("Qty", 135, y);
+    doc.text("Amount", 160, y);
+
+    y += 6;
+    doc.line(14, y, 195, y);
+    y += 6;
+
+    rows.forEach((row) => {
+      doc.text(row.itemDescription, 14, y);
+      doc.text(row.sku || "-", 60, y);
+      doc.text(row.category || "-", 95, y);
+      doc.text(String(row.ordered), 135, y);
+      doc.text(`$${row.amount.toLocaleString()}`, 160, y);
+      y += 7;
+    });
+
+    y += 5;
+    doc.line(14, y, 195, y);
+    y += 8;
+    doc.setFontSize(12);
+    doc.text(`Total Amount: $${newPoTotal.toLocaleString()}`, 14, y);
+
+    if (mode === "preview") {
+      window.open(doc.output("bloburl"), "_blank");
+      return;
+    }
+
+    doc.save(`${poNumber}.pdf`);
+  };
+
+  const sendEmail = () => {
+    const poNumber = savedPoNumber || getNextPoNumber(purchaseOrders);
+    const subject = encodeURIComponent(`Purchase Order ${poNumber}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease see purchase order details below.\n\nPO Number: ${poNumber}\nVendor: ${
+        newVendor || "Select Vendor"
+      }\nCustomer: ${newCustomer || "Select Customer"}\nShip Date: ${
+        shipDate || "2026-06-01"
+      }\nTotal Amount: $${newPoTotal.toLocaleString()}\n\nSender: kevingalang.mcg@gmail.com\n\nThank you.`
+    );
+
+    window.location.href = `mailto:mcgalang14@gmail.com?subject=${subject}&body=${body}`;
+  };
+
+  const resetCreateModal = () => {
     setShowCreateModal(false);
-    setNewVendor("Vendor 1");
-    setNewCustomer("Customer 1");
+    setNewVendor("");
+    setNewCustomer("");
     setShipDate("");
+    setSavedPoNumber("");
     setNewRows([
       {
         id: Date.now(),
         sku: "",
         itemDescription: "",
         category: "",
-        ordered: 10,
-        amount: 0,
+        ordered: 0,
+        amount: randomAmount(),
       },
     ]);
   };
@@ -921,7 +1039,7 @@ export default function PurchaseOrderPage() {
 
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={resetCreateModal}
                 className="rounded-lg p-2 hover:bg-slate-100"
               >
                 <X size={20} />
@@ -939,6 +1057,7 @@ export default function PurchaseOrderPage() {
                     onChange={(e) => setNewVendor(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900"
                   >
+                    <option value="">Select Vendor</option>
                     {vendors.map((vendorName) => (
                       <option key={vendorName} value={vendorName}>
                         {vendorName}
@@ -956,9 +1075,12 @@ export default function PurchaseOrderPage() {
                     onChange={(e) => setNewCustomer(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900"
                   >
-                    <option value="Customer 1">Customer 1</option>
-                    <option value="Customer 2">Customer 2</option>
-                    <option value="Customer 3">Customer 3</option>
+                    <option value="">Select Customer</option>
+                    {customers.map((customerName) => (
+                      <option key={customerName} value={customerName}>
+                        {customerName}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -989,7 +1111,7 @@ export default function PurchaseOrderPage() {
                         Category
                       </th>
                       <th className="px-4 py-3 text-left font-semibold">
-                        Ordered Qty
+                        Order Qty
                       </th>
                       <th className="px-4 py-3 text-left font-semibold">
                         Amount
@@ -1084,25 +1206,65 @@ export default function PurchaseOrderPage() {
                 <Plus size={16} />
                 Add Row
               </button>
+
+              {savedPoNumber && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                  Saved as {savedPoNumber}. You can now Preview, Download, or
+                  Send.
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm font-semibold text-slate-700">
+                Total: ${newPoTotal.toLocaleString()}
+              </div>
 
-              <button
-                type="button"
-                onClick={saveNewPurchaseOrder}
-                className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                <Save size={16} />
-                Save Purchase Order
-              </button>
+              <div className="flex flex-wrap justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => generatePdf("preview")}
+                  className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Eye size={16} />
+                  Preview
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => generatePdf("download")}
+                  className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+
+                <button
+                  type="button"
+                  onClick={sendEmail}
+                  className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Send size={16} />
+                  Send
+                </button>
+
+                <button
+                  type="button"
+                  onClick={resetCreateModal}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveNewPurchaseOrder}
+                  className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  <Save size={16} />
+                  Save Purchase Order
+                </button>
+              </div>
             </div>
           </div>
         </div>
